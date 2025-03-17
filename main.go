@@ -132,7 +132,6 @@ func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 	return progressbar.NewOptions(proxyNumber,
 		progressbar.OptionSetDescription("  ↳ Processing file..."),
 		progressbar.OptionSetWidth(20),
-		progressbar.OptionSetPadding(3),
 		progressbar.OptionShowCount(),
 		progressbar.OptionSetRenderBlankState(true),
 		progressbar.OptionSetTheme(progressbar.Theme{
