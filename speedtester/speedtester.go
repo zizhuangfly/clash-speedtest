@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/url"
+	"path/filepath"
 	"net/http"
 	"os"
 	"regexp"
@@ -267,10 +269,10 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		result.ExtraURLConnectivity = true
 	}
 	if extraOpenResult != nil {
-		result.ExtraURLOpenSpeed = extraOpenResult.bytes / extraOpenResult.duration.Seconds()
+		result.ExtraURLOpenSpeed = float64(extraOpenResult.bytes) / extraOpenResult.duration.Seconds()
 	}
 	if extraDownloadResult != nil {
-		result.ExtraDownloadSpeed = extraDownloadResult.bytes / extraDownloadResult.duration.Seconds()
+		result.ExtraDownloadSpeed = float64(extraDownloadResult.bytes) / extraDownloadResult.duration.Seconds()
 	}
 
 	// 2. 并发进行下载和上传测试
@@ -379,7 +381,7 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[strin
 	var extraOpenResult *downloadResult
 	var extraDownloadResult *downloadResult
 
-	totalDownloadBytes := 0
+	totalDownloadBytes := int64(0)
 	totalDownloadDuration := time.Duration(0)
 	if len(st.config.ExtraConnectURL) > 0 {
 		extraLatencyResult = make(map[string]*latencyResult, len(st.config.ExtraConnectURL))
@@ -411,7 +413,7 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[strin
 				resp.Body.Close()
 			}
 			extraLatencyResult[url] = calculateLatencyStats(latencies, failedPings)
-			if extraLatencyResult.packetLoss == 100 {
+			if extraLatencyResult[url].packetLoss == 100 {
 				//如果连通性测试都不OK的话，也就不用继续了
 				return extraLatencyResult, nil, nil
 			}

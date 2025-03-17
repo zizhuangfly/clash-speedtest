@@ -83,7 +83,7 @@ func main() {
 		}
 		bar.Add(1)
 		bar.Describe(actualPath)
-		subBar := createSubBar(actualPath, len(allProxies))
+		subBar := createSubBar(len(allProxies))
 		speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
 			subBar.Add(1)
 			subBar.Describe(result.ProxyName)
@@ -127,7 +127,7 @@ func isProxyGood(result *speedtester.Result) {
 }
 
 
-func createSubBar(string filepath, proxyNumber int) *progressbar.ProgressBar {
+func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 	// 子进度条带缩进
 	return progressbar.NewOptions(proxyNumber,
 		progressbar.OptionSetDescription("  ↳ Processing file..."),
