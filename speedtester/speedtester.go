@@ -146,8 +146,9 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	return filteredProxies, nil
 }
 
-func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *Result)) {
+func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, beforeFn func(name string), fn func(result *Result)) {
 	for name, proxy := range proxies {
+		beforeFn(name)
 		fn(st.testProxy(name, proxy))
 	}
 }
@@ -370,15 +371,22 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy) *latencyResult {
 	client := st.createClient(proxy)
 	latencies := make([]time.Duration, 0, 6)
 	failedPings := 0
-
+	continuousFailures := 0
 	for i := 0; i < 6; i++ {
+		if continuousFailures >= 3 {
+			failedPings = 6;
+			break
+		}
 		time.Sleep(100 * time.Millisecond)
 
 		start := time.Now()
 		resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=0", st.config.ServerURL))
 		if err != nil {
 			failedPings++
+			continuousFailures++
 			continue
+		} else {
+			continuousFailures = 0
 		}
 		resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {

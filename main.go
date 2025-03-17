@@ -72,32 +72,48 @@ func main() {
 	}
 
 	speedTester := speedtester.New(&config)
-	bar := progressbar.Default(int64(len(actualPaths)), "测试中...")
+
+	// 主进度条配置
+	mainBar := progressbar.NewOptions(len(actualPaths),
+		progressbar.OptionSetDescription("📦 yaml测试进行中"),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "█",
+			SaucerPadding: " ",
+			BarStart:      "|",
+			BarEnd:        "|",
+		}),
+		progressbar.OptionOnCompletion(func() { 
+			fmt.Println("\n✅ 所有yaml文件测试完成！") 
+		}),
+	)
 	results := make([]*speedtester.Result, 0)
 
 	for _, actualPath := range actualPaths {
 		config.ConfigPaths = actualPath
+		mainBar.Describe("📦 " + actualPath)
 		allProxies, err := speedTester.LoadProxies()
 		if err != nil {
 			log.Warnln("load proxies failed: %v, %v, ", actualPath, err)
 		}
-		bar.Add(1)
-		bar.Describe(actualPath)
 		subBar := createSubBar(len(allProxies))
-		speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+		speedTester.TestProxies(allProxies, func(name string) {
+			subBar.Describe("    ↳🛠️" + name)
+		},
+		func(result *speedtester.Result) {
 			subBar.Add(1)
-			subBar.Describe(result.ProxyName)
 			if isProxyUsable(result) {
 				results = append(results, result)
+			} else {
+				log.Infoln("%s is not useable", result.ProxyName)
 			}
 		})
+		subBar.Finish()
+		mainBar.Add(1)
 	}
-
+	mainBar.Finish()
 	
-
-	
-	
-
 	sort.Slice(results, func(i, j int) bool {
 		if isProxyGood(results[i]) == isProxyGood(results[j]) {
 			return results[i].DownloadSpeed > results[j].DownloadSpeed
@@ -129,18 +145,19 @@ func isProxyGood(result *speedtester.Result) bool {
 
 func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 	// 子进度条带缩进
-	return progressbar.NewOptions(proxyNumber,
-		progressbar.OptionSetDescription("  ↳ Processing file..."),
+	subBar := progressbar.NewOptions(proxyNumber,
 		progressbar.OptionSetWidth(20),
+		progressbar.OptionSetDescription("    ↳🛠️"),
 		progressbar.OptionShowCount(),
-		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionSetVisibility(true),
 		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "█",
-			SaucerPadding: "░",
+			Saucer:        "░",
+			SaucerPadding: " ",
 			BarStart:      "[",
 			BarEnd:        "]",
 		}),
 	)
+	return subBar
 }
 
 
