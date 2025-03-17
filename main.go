@@ -7,6 +7,11 @@ import (
 	"sort"
 	"time"
 
+	"io/fs"
+	"path/filepath"
+	"regexp"
+	"strings"
+
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/metacubex/mihomo/log"
 	"github.com/olekukonko/tablewriter"
@@ -15,16 +20,23 @@ import (
 )
 
 var (
-	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
-	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
-	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "server url")
-	downloadSize      = flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
-	uploadSize        = flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
-	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
-	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
-	outputPath        = flag.String("output", "", "output config file path")
-	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
-	minSpeed          = flag.Float64("min-speed", 5, "filter speed less than this value(unit: MB/s)")
+	configPathsConfig 			= flag.String("c", "", "config file path, also support http(s) url")
+	filterRegexConfig 			= flag.String("f", ".+", "filter proxies by name, use regexp")
+	serverURL        		    = flag.String("server-url", "https://speed.cloudflare.com", "server url")
+	downloadSize      			= flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
+	uploadSize        			= flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
+	timeout           			= flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
+	concurrent        			= flag.Int("concurrent", 4, "download concurrent size")
+	outputPath       			= flag.String("output", "./useable.yaml", "output config file path")
+	goodOutputPath				= flag.String("good-output", "./good.yaml", "output good config file path")
+	maxLatency        			= flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
+	minSpeed         			= flag.Float64("min-speed", 0.1, "filter speed less than this value(unit: MB/s)")
+	skipPaths		  			= flag.String("skip-paths", "", "filter unwanted yaml file if specify direcotry")
+	extraConnectURL   			= flag.String("extra-connect-url", "", "must connect urls, ',' split multiple urls")
+	extraDownloadURL  			= flag.String("extra-download-url", "", "extra speed test url, like google drive share files")
+	openSpeedThreshold			= flag.Int("open-speed-threshold", 0.1, "满足节点可用性的网站打开速度(单位: MB/s)")
+	goodOpenSpeedThreshold		= flag.Int("good-open-speed-threshold", 0.5, "确定为优质节点的网站打开速度(单位: MB/s)")
+	goodDownloadSpeedThreshold	= flag.Int("good-download-speed-threshold", 0.5, "确定为优质节点的资源下载速度(单位: MB/s)")
 )
 
 const (
@@ -41,44 +53,181 @@ func main() {
 	if *configPathsConfig == "" {
 		log.Fatalln("please specify the configuration file")
 	}
-
-	speedTester := speedtester.New(&speedtester.Config{
-		ConfigPaths:  *configPathsConfig,
+	config := speedtester.Config{
+		//ConfigPaths:  *configPathsConfig,
 		FilterRegex:  *filterRegexConfig,
 		ServerURL:    *serverURL,
 		DownloadSize: *downloadSize,
 		UploadSize:   *uploadSize,
 		Timeout:      *timeout,
 		Concurrent:   *concurrent,
-	})
-
-	allProxies, err := speedTester.LoadProxies()
-	if err != nil {
-		log.Fatalln("load proxies failed: %v", err)
+	}
+	if *extraConnectURL != "" {
+		config.ExtraConnectURL = strings.Split(*extraConnectURL, ",")
 	}
 
-	bar := progressbar.Default(int64(len(allProxies)), "测试中...")
+	actualPaths, _ := getAllConfigPath(*configPathsConfig, *skipPaths)
+	if len(actualPaths) == 0 {
+		log.Fatalln("cannot find yaml paths")
+	}
+
+	speedTester := speedtester.New(&config)
+	bar := progressbar.Default(int64(len(actualPaths)), "测试中...")
 	results := make([]*speedtester.Result, 0)
-	speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+
+	for _, actualPath := range actualPaths {
+		config.ConfigPaths = actualPath
+		allProxies, err := speedTester.LoadProxies()
+		if err != nil {
+			log.Warnln("load proxies failed: %v, %v, ", actualPath, err)
+		}
 		bar.Add(1)
-		bar.Describe(result.ProxyName)
-		results = append(results, result)
-	})
+		bar.Describe(actualPath)
+		subBar := createSubBar(actualPath, len(allProxies))
+		speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+			subBar.Add(1)
+			subBar.Describe(result.ProxyName)
+			if isProxyUsable(result) {
+				results = append(results, result)
+			}
+		})
+	}
+
+	
+
+	
+	
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].DownloadSpeed > results[j].DownloadSpeed
+		if isProxyGood(results[i]) == isProxyGood(results[j]) {
+			return results[i].DownloadSpeed > results[j].DownloadSpeed
+		}
+		return isProxyGood(results[i])
 	})
 
 	printResults(results)
 
-	if *outputPath != "" {
-		err = saveConfig(results)
-		if err != nil {
-			log.Fatalln("save config file failed: %v", err)
-		}
-		fmt.Printf("\nsave config file to: %s\n", *outputPath)
+	if *outputPath != "" || *goodOutputPath != "" {
+		saveConfig(results)
 	}
 }
+
+func isProxyUsable(result *speedtester.Result) {
+	return (result.Latency <= *maxLatency || *maxLatency == 0) && result.ExtraURLConnectivity = true && (result.ExtraURLOpenSpeed >= *openSpeedThreshold || *extraConnectURL == "")
+	&& result.DownloadSpeed >= *minSpeed * 1024 * 1024 && (result.ExtraDownloadSpeed >= *minSpeed * 1024 * 1024 || *extraDownloadURL == "")
+}
+
+
+func isProxyGood(result *speedtester.Result) {
+	return isProxyUsable(result) && result.DownloadSpeed >= *goodDownloadSpeedThreshold && (result.ExtraURLOpenSpeed >= *goodOpenSpeedThreshold || *extraConnectURL == "")
+	&& (result.ExtraDownloadSpeed >= *goodDownloadSpeedThreshold || *extraDownloadURL == "")
+}
+
+
+func createSubBar(string filepath, proxyNumber int) *progressbar.ProgressBar {
+	// 子进度条带缩进
+	return progressbar.NewOptions(proxyNumber,
+		progressbar.OptionSetDescription("  ↳ Processing file..."),
+		progressbar.OptionSetWidth(20),
+		progressbar.OptionSetPadding(3),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionSetWriter(ansi.NewAnsiStdout()), // 必须使用 ANSI 输出
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "█",
+			SaucerPadding: "░",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+}
+
+
+func getAllConfigPath(configPaths string, string skipPaths) ([]string, error) {
+	var result []string
+	httpRegex := regexp.MustCompile(`^https?://`)
+	
+	_skipPaths := strings.Split(skipPaths, ",")
+
+	for i, pattern := range _skipPaths {        
+        // 模式也转为绝对路径
+        _skipPaths[i], _ = filepath.Abs(pattern) 
+		_skipPaths[i] = filepath.ToSlash(_skipPaths[i])
+	}
+
+	cfgPaths := strings.Split(configPaths, ",")
+	resultPaths := make([]string, len(cfgPaths))
+
+	for _, path := range cfgPaths {
+
+		// 处理HTTP链接
+		if httpRegex.MatchString(path) {
+			resultPaths = append(resultPaths, path)
+			continue
+		}
+
+		// 获取绝对路径
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			log.Fatalln("error to get abs path of: %v", path)
+		}
+
+		// 检查文件/目录是否存在
+		info, err := os.Stat(absPath)
+		if os.IsNotExist(err) {
+			log.Fatalln("absPath: %v not exist", absPath)
+		}
+
+		// 处理文件
+		if !info.IsDir() {
+			if isYamlFile(absPath) && !isSkipped(absPath, _skipPaths) {
+				resultPaths = append(resultPaths, absPath)
+			}
+			continue
+		}
+
+		// 处理目录
+		err = filepath.WalkDir(absPath, func(walkPath string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !isYamlFile(walkPath) {
+				return err
+			}
+
+			if !isSkipped(walkPath, _skipPaths) {
+				resultPaths = append(resultPaths, walkPath)
+			}
+			return nil
+		})
+
+		if err != nil {
+			log.Fatalln("error walking directory: %w", err)
+		}
+	}
+
+	return resultPaths, nil
+}
+
+func isYamlFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".yaml" || ext == ".yml"
+}
+
+func isSkipped(path string, skipPaths []string) bool {
+	for _, pattern := range skipPaths {        
+        
+        // 通配符匹配
+        if match, _ := filepath.Match(pattern, path); match {
+            return true
+        }
+
+        // 前缀匹配（兼容Windows）
+        normalizedPath := filepath.ToSlash(path)
+        if strings.HasPrefix(normalizedPath, pattern) {
+            return true
+        }
+    }
+    return false
+}
+
 
 func printResults(results []*speedtester.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
@@ -187,20 +336,9 @@ func printResults(results []*speedtester.Result) {
 	fmt.Println()
 }
 
-func saveConfig(results []*speedtester.Result) error {
-	filteredResults := make([]*speedtester.Result, 0)
-	for _, result := range results {
-		if *maxLatency > 0 && result.Latency > *maxLatency {
-			continue
-		}
-		if *minSpeed > 0 && float64(result.DownloadSpeed)/(1024*1024) < *minSpeed {
-			continue
-		}
-		filteredResults = append(filteredResults, result)
-	}
-
+func doSaveConfig(results []*speedtester.Result, string absPath) error {
 	proxies := make([]map[string]any, 0)
-	for _, result := range filteredResults {
+	for _, result := range results {
 		proxies = append(proxies, result.ProxyConfig)
 	}
 
@@ -209,8 +347,30 @@ func saveConfig(results []*speedtester.Result) error {
 	}
 	yamlData, err := yaml.Marshal(config)
 	if err != nil {
-		return err
+		log.Fatalln("convert yaml: %s failed: %v", absPath, err)
 	}
+	err = os.WriteFile(absGoodOutputPath, yamlData, 0o644)
+	if err != nil {
+		fmt.Printf("\nsave good config file to: %s\n", absPath)
+	} else {
+		log.Fatalln("save config file: %s failed: %v", absPath, err)
+	}
+}
 
-	return os.WriteFile(*outputPath, yamlData, 0o644)
+func saveConfig(results []*speedtester.Result) error {
+	if *goodOutputPath != "" {
+		absGoodOutputPath, _ := filepath.Abs(*goodOutputPath)
+		goodResults := make([]*speedtester.Result, 0)
+		for _, result := range results {
+			if isProxyGood(result) {
+				goodResults = append(goodResults, result)
+			}
+		}
+		doSaveConfig(goodResults, absGoodOutputPath)
+	}
+	if *outputPath != "" {
+		absOutputPath, _ := filepath.Abs(*outputPath)
+		doSaveConfig(results, absOutputPath)
+	}
+	
 }

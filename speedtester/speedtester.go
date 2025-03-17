@@ -22,13 +22,15 @@ import (
 )
 
 type Config struct {
-	ConfigPaths  string
-	FilterRegex  string
-	ServerURL    string
-	DownloadSize int
-	UploadSize   int
-	Timeout      time.Duration
-	Concurrent   int
+	ConfigPaths  		string
+	FilterRegex  		string
+	ServerURL    		string
+	DownloadSize 		int
+	UploadSize   		int
+	Timeout      		time.Duration
+	Concurrent   		int
+	ExtraConnectURL 	string[]
+	ExtraDownloadURL	string
 }
 
 type SpeedTester struct {
@@ -154,18 +156,21 @@ type testJob struct {
 }
 
 type Result struct {
-	ProxyName     string         `json:"proxy_name"`
-	ProxyType     string         `json:"proxy_type"`
-	ProxyConfig   map[string]any `json:"proxy_config"`
-	Latency       time.Duration  `json:"latency"`
-	Jitter        time.Duration  `json:"jitter"`
-	PacketLoss    float64        `json:"packet_loss"`
-	DownloadSize  float64        `json:"download_size"`
-	DownloadTime  time.Duration  `json:"download_time"`
-	DownloadSpeed float64        `json:"download_speed"`
-	UploadSize    float64        `json:"upload_size"`
-	UploadTime    time.Duration  `json:"upload_time"`
-	UploadSpeed   float64        `json:"upload_speed"`
+	ProxyName     			string         `json:"proxy_name"`
+	ProxyType     			string         `json:"proxy_type"`
+	ProxyConfig  			map[string]any `json:"proxy_config"`
+	Latency       			time.Duration  `json:"latency"`
+	Jitter       			time.Duration  `json:"jitter"`
+	PacketLoss    			float64        `json:"packet_loss"`
+	DownloadSize  			float64        `json:"download_size"`
+	DownloadTime  			time.Duration  `json:"download_time"`
+	DownloadSpeed 			float64        `json:"download_speed"`
+	UploadSize   			float64        `json:"upload_size"`
+	UploadTime   			time.Duration  `json:"upload_time"`
+	UploadSpeed   			float64        `json:"upload_speed"`
+	ExtraURLConnectivity	bool		   `json:extra_url_connectivity`
+	ExtraURLOpenSpeed       float64        `json:"extra_url_open_speed"`
+	ExtraDownloadSpeed		float64        `json:"extra_download_speed"`
 }
 
 func (r *Result) FormatDownloadSpeed() string {
@@ -205,9 +210,40 @@ func formatSpeed(bytesPerSecond float64) string {
 	return fmt.Sprintf("%.2f%s", speed, units[unit])
 }
 
+// getFileNameWithoutExt 从路径或 URL 中提取文件名并去掉后缀
+func getFileNameWithoutExt(input string) (string, error) {
+    // 解析 URL
+    parsedURL, err := url.Parse(input)
+    if err == nil && parsedURL.Scheme != "" {
+        // 如果是有效的 URL，使用 URL 的 Path
+        input = parsedURL.Path
+    }
+
+    // 获取文件名
+    fileName := filepath.Base(input) // 获取路径中的最后一部分
+
+    // 去掉文件后缀
+    fileNameWithoutExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+
+    return fileNameWithoutExt, nil
+}
+
+func existConnectivityProblem(latencyResultMap map[string]*latencyResult) bool {
+	if len(latencyResultMap) == 0 {
+		return false
+	}
+	for _, data := range latencyResultMap {
+        if data.packetLoss == 100 {
+			return true
+		}
+    }
+	return false
+}
+
 func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
+	fileName, _ := getFileNameWithoutExt(st.config.ConfigPaths)
 	result := &Result{
-		ProxyName:   name,
+		ProxyName:   fileName + "_" + name,
 		ProxyType:   proxy.Type().String(),
 		ProxyConfig: proxy.Config,
 	}
@@ -223,6 +259,20 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		return result
 	}
 
+	extraLatencyResult, extraOpenResult, extraDownloadResult := st.testExtraLatencyAndSpeed(proxy)
+	if existConnectivityProblem(extraLatencyResult) {
+		result.ExtraURLConnectivity = false
+		return result
+	} else {
+		result.ExtraURLConnectivity = true
+	}
+	if extraOpenResult != nil {
+		result.ExtraURLOpenSpeed = extraOpenResult.bytes / extraOpenResult.duration.Seconds()
+	}
+	if extraDownloadResult != nil {
+		result.ExtraDownloadSpeed = extraDownloadResult.bytes / extraDownloadResult.duration.Seconds()
+	}
+
 	// 2. 并发进行下载和上传测试
 	var wg sync.WaitGroup
 	downloadResults := make(chan *downloadResult, st.config.Concurrent)
@@ -236,7 +286,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			downloadResults <- st.testDownload(proxy, downloadChunkSize)
+			downloadResults <- st.testDownload(proxy, fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, downloadChunkSize))
 		}()
 	}
 	wg.Wait()
@@ -252,6 +302,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		}()
 	}
 	wg.Wait()
+
 
 	// 3. 汇总结果
 	var totalDownloadBytes, totalUploadBytes int64
@@ -321,16 +372,75 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy) *latencyResult {
 	return calculateLatencyStats(latencies, failedPings)
 }
 
+func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[string]*latencyResult, *downloadResult, *downloadResult) {
+	client := st.createClient(proxy)
+	testTimes := 6
+	var extraLatencyResult map[string]*latencyResult
+	var extraOpenResult *downloadResult
+	var extraDownloadResult *downloadResult
+
+	totalDownloadBytes := 0
+	totalDownloadDuration := time.Duration(0)
+	if len(st.config.ExtraConnectURL) > 0 {
+		extraLatencyResult = make(map[string]*latencyResult, len(st.config.ExtraConnectURL))
+		
+		for _, url := range st.config.ExtraConnectURL {
+			latencies := make([]time.Duration, 0, testTimes)
+			failedPings := 0
+			for i := 0; i < testTimes; i++ {
+				time.Sleep(100 * time.Millisecond)
+	
+				start := time.Now()
+				resp, err := client.Get(url)
+				if err != nil {
+					failedPings++
+					continue
+				}
+				
+				if resp.StatusCode == http.StatusOK {
+					latencies = append(latencies, time.Since(start))
+				} else {
+					failedPings++
+					continue
+				}
+
+				downloadBytes, _ := io.Copy(io.Discard, resp.Body)
+				totalDownloadBytes += downloadBytes
+				totalDownloadDuration += time.Since(start)
+
+				resp.Body.Close()
+			}
+			extraLatencyResult[url] = calculateLatencyStats(latencies, failedPings)
+			if extraLatencyResult.packetLoss == 100 {
+				//如果连通性测试都不OK的话，也就不用继续了
+				return extraLatencyResult, nil, nil
+			}
+		}
+		if totalDownloadBytes > 0 {
+			extraOpenResult = &downloadResult{
+				bytes:    totalDownloadBytes,
+				duration: totalDownloadDuration,
+			}
+		}
+	}
+	if st.config.ExtraDownloadURL != "" {
+		extraDownloadResult = st.testDownload(proxy, st.config.ExtraDownloadURL)
+	}
+	
+
+	return extraLatencyResult, extraOpenResult, extraDownloadResult
+}
+
 type downloadResult struct {
 	bytes    int64
 	duration time.Duration
 }
 
-func (st *SpeedTester) testDownload(proxy constant.Proxy, size int) *downloadResult {
+func (st *SpeedTester) testDownload(proxy constant.Proxy, url) *downloadResult {
 	client := st.createClient(proxy)
 	start := time.Now()
 
-	resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, size))
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil
 	}
