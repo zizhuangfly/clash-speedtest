@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/metacubex/mihomo v1.18.10
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/schollz/progressbar/v3 v3.17.0
+	github.com/schollz/progressbar/v3 v3.18.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

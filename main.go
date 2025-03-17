@@ -135,7 +135,6 @@ func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 		progressbar.OptionSetPadding(3),
 		progressbar.OptionShowCount(),
 		progressbar.OptionSetRenderBlankState(true),
-		progressbar.OptionSetWriter(ansi.NewAnsiStdout()), // 必须使用 ANSI 输出
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        "█",
 			SaucerPadding: "░",
@@ -338,7 +337,7 @@ func printResults(results []*speedtester.Result) {
 	fmt.Println()
 }
 
-func doSaveConfig(results []*speedtester.Result, absPath string) error {
+func doSaveConfig(results []*speedtester.Result, absPath string) {
 	proxies := make([]map[string]any, 0)
 	for _, result := range results {
 		proxies = append(proxies, result.ProxyConfig)
@@ -351,7 +350,7 @@ func doSaveConfig(results []*speedtester.Result, absPath string) error {
 	if err != nil {
 		log.Fatalln("convert yaml: %s failed: %v", absPath, err)
 	}
-	err = os.WriteFile(absGoodOutputPath, yamlData, 0o644)
+	err = os.WriteFile(absPath, yamlData, 0o644)
 	if err != nil {
 		fmt.Printf("\nsave good config file to: %s\n", absPath)
 	} else {
@@ -359,7 +358,7 @@ func doSaveConfig(results []*speedtester.Result, absPath string) error {
 	}
 }
 
-func saveConfig(results []*speedtester.Result) error {
+func saveConfig(results []*speedtester.Result) {
 	if *goodOutputPath != "" {
 		absGoodOutputPath, _ := filepath.Abs(*goodOutputPath)
 		goodResults := make([]*speedtester.Result, 0)
@@ -374,5 +373,4 @@ func saveConfig(results []*speedtester.Result) error {
 		absOutputPath, _ := filepath.Abs(*outputPath)
 		doSaveConfig(results, absOutputPath)
 	}
-	
 }
