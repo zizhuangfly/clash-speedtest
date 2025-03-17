@@ -436,7 +436,7 @@ type downloadResult struct {
 	duration time.Duration
 }
 
-func (st *SpeedTester) testDownload(proxy constant.Proxy, url) *downloadResult {
+func (st *SpeedTester) testDownload(proxy constant.Proxy, string url) *downloadResult {
 	client := st.createClient(proxy)
 	start := time.Now()
 
