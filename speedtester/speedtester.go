@@ -29,7 +29,7 @@ type Config struct {
 	UploadSize   		int
 	Timeout      		time.Duration
 	Concurrent   		int
-	ExtraConnectURL 	string[]
+	ExtraConnectURL 	[]string
 	ExtraDownloadURL	string
 }
 

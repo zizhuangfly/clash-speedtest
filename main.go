@@ -147,7 +147,6 @@ func createSubBar(string filepath, proxyNumber int) *progressbar.ProgressBar {
 
 
 func getAllConfigPath(configPaths string, string skipPaths) ([]string, error) {
-	var result []string
 	httpRegex := regexp.MustCompile(`^https?://`)
 	
 	_skipPaths := strings.Split(skipPaths, ",")
