@@ -361,7 +361,7 @@ func printResults(results []*speedtester.Result) {
 			uploadSpeedStr,
 			extraURLConnectivityStr,
 			extraURLOpenSpeedStr,
-			extraDownloadSpeedStr
+			extraDownloadSpeedStr,
 		}
 
 		table.Append(row)
