@@ -48,7 +48,7 @@ const (
 
 func main() {
 	flag.Parse()
-	log.SetLevel(log.SILENT)
+	log.SetLevel(log.INFO)
 
 	if *configPathsConfig == "" {
 		log.Fatalln("please specify the configuration file")
@@ -390,6 +390,10 @@ func printResults(results []*speedtester.Result) {
 }
 
 func doSaveConfig(results []*speedtester.Result, absPath string) {
+	if len(results) == 0 {
+		log.Warnln("%s 无任何有效节点信息", absPath)
+		return
+	}
 	proxies := make([]map[string]any, 0)
 	for _, result := range results {
 		proxies = append(proxies, result.ProxyConfig)
@@ -403,7 +407,7 @@ func doSaveConfig(results []*speedtester.Result, absPath string) {
 		log.Fatalln("convert yaml: %s failed: %v", absPath, err)
 	}
 	err = os.WriteFile(absPath, yamlData, 0o644)
-	if err != nil {
+	if err == nil {
 		fmt.Printf("\nsave good config file to: %s\n", absPath)
 	} else {
 		log.Fatalln("save config file: %s failed: %v", absPath, err)
