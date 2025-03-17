@@ -243,7 +243,7 @@ func printResults(results []*speedtester.Result) {
 		"上传速度",
 		"自定义网站连通性",
 		"自定义网站打开速度",
-		"自定义资源下载速度"
+		"自定义资源下载速度",
 	})
 
 	table.SetAutoWrapText(false)
