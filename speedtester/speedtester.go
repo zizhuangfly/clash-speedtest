@@ -201,6 +201,23 @@ func (r *Result) FormatUploadSpeed() string {
 	return formatSpeed(r.UploadSpeed)
 }
 
+func (r *Result) FormatExtraURLConnectivity() string {
+	if r.ExtraURLConnectivity {
+		return "OK"
+	}
+	return "BLOCK"
+}
+
+func (r *Result) FormatExtraURLOpenSpeed() string {
+	return formatSpeed(r.ExtraURLOpenSpeed)
+}
+
+
+func (r *Result) FormatExtraDownloadSpeed() string {
+	return formatSpeed(r.ExtraDownloadSpeed)
+}
+
+
 func formatSpeed(bytesPerSecond float64) string {
 	units := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
 	unit := 0

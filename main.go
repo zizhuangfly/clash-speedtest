@@ -241,6 +241,9 @@ func printResults(results []*speedtester.Result) {
 		"丢包率",
 		"下载速度",
 		"上传速度",
+		"自定义网站连通性",
+		"自定义网站打开速度",
+		"自定义资源下载速度"
 	})
 
 	table.SetAutoWrapText(false)
@@ -272,6 +275,7 @@ func printResults(results []*speedtester.Result) {
 			latencyStr = colorRed + latencyStr + colorReset
 		}
 
+
 		jitterStr := result.FormatJitter()
 		if result.Jitter > 0 {
 			if result.Jitter < 800*time.Millisecond {
@@ -298,9 +302,9 @@ func printResults(results []*speedtester.Result) {
 		// 下载速度颜色 (以MB/s为单位判断)
 		downloadSpeed := result.DownloadSpeed / (1024 * 1024)
 		downloadSpeedStr := result.FormatDownloadSpeed()
-		if downloadSpeed >= 10 {
+		if downloadSpeed >= *goodDownloadSpeedThreshold {
 			downloadSpeedStr = colorGreen + downloadSpeedStr + colorReset
-		} else if downloadSpeed >= 5 {
+		} else if downloadSpeed >= *minSpeed + 0.1 {
 			downloadSpeedStr = colorYellow + downloadSpeedStr + colorReset
 		} else {
 			downloadSpeedStr = colorRed + downloadSpeedStr + colorReset
@@ -309,12 +313,41 @@ func printResults(results []*speedtester.Result) {
 		// 上传速度颜色
 		uploadSpeed := result.UploadSpeed / (1024 * 1024)
 		uploadSpeedStr := result.FormatUploadSpeed()
-		if uploadSpeed >= 5 {
+		if uploadSpeed >= 0.5 {
 			uploadSpeedStr = colorGreen + uploadSpeedStr + colorReset
-		} else if uploadSpeed >= 2 {
+		} else if uploadSpeed >= 0.2 {
 			uploadSpeedStr = colorYellow + uploadSpeedStr + colorReset
 		} else {
 			uploadSpeedStr = colorRed + uploadSpeedStr + colorReset
+		}
+
+		//自定义网站连通性
+		extraURLConnectivityStr := result.FormatExtraURLConnectivity()
+		if result.ExtraURLConnectivity {
+			extraURLConnectivityStr = colorGreen + extraURLConnectivityStr + colorReset
+		} else {
+			extraURLConnectivityStr = colorRed + extraURLConnectivityStr + colorReset
+		}
+
+		
+		urlOpenSpeed := result.ExtraURLOpenSpeed / (1024 * 1024)
+		extraURLOpenSpeedStr := result.FormatExtraURLOpenSpeed()
+		if urlOpenSpeed >= *goodOpenSpeedThreshold {
+			extraURLOpenSpeedStr = colorGreen + extraURLOpenSpeedStr + colorReset
+		} else if urlOpenSpeed >= *openSpeedThreshold + 0.1 {
+			extraURLOpenSpeedStr = colorYellow + extraURLOpenSpeedStr + colorReset
+		} else {
+			extraURLOpenSpeedStr = colorRed + extraURLOpenSpeedStr + colorReset
+		}
+
+		extraDownloadSpeed := result.ExtraDownloadSpeed / (1024 * 1024)
+		extraDownloadSpeedStr := result.FormatExtraDownloadSpeed()
+		if extraDownloadSpeed >= *goodDownloadSpeedThreshold {
+			extraDownloadSpeedStr = colorGreen + extraDownloadSpeedStr + colorReset
+		} else if extraDownloadSpeed >= *minSpeed + 0.1 {
+			extraDownloadSpeedStr = colorYellow + extraDownloadSpeedStr + colorReset
+		} else {
+			extraDownloadSpeedStr = colorRed + extraDownloadSpeedStr + colorReset
 		}
 
 		row := []string{
@@ -326,6 +359,9 @@ func printResults(results []*speedtester.Result) {
 			packetLossStr,
 			downloadSpeedStr,
 			uploadSpeedStr,
+			extraURLConnectivityStr,
+			extraURLOpenSpeedStr,
+			extraDownloadSpeedStr
 		}
 
 		table.Append(row)
