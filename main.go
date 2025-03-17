@@ -34,9 +34,9 @@ var (
 	skipPaths		  			= flag.String("skip-paths", "", "filter unwanted yaml file if specify direcotry")
 	extraConnectURL   			= flag.String("extra-connect-url", "", "must connect urls, ',' split multiple urls")
 	extraDownloadURL  			= flag.String("extra-download-url", "", "extra speed test url, like google drive share files")
-	openSpeedThreshold			= flag.Int("open-speed-threshold", 0.1, "满足节点可用性的网站打开速度(单位: MB/s)")
-	goodOpenSpeedThreshold		= flag.Int("good-open-speed-threshold", 0.5, "确定为优质节点的网站打开速度(单位: MB/s)")
-	goodDownloadSpeedThreshold	= flag.Int("good-download-speed-threshold", 0.5, "确定为优质节点的资源下载速度(单位: MB/s)")
+	openSpeedThreshold			= flag.Float64("open-speed-threshold", 0.1, "满足节点可用性的网站打开速度(单位: MB/s)")
+	goodOpenSpeedThreshold		= flag.Float64("good-open-speed-threshold", 0.5, "确定为优质节点的网站打开速度(单位: MB/s)")
+	goodDownloadSpeedThreshold	= flag.Float64("good-download-speed-threshold", 0.5, "确定为优质节点的资源下载速度(单位: MB/s)")
 )
 
 const (
@@ -112,15 +112,15 @@ func main() {
 	}
 }
 
-func isProxyUsable(result *speedtester.Result) {
+func isProxyUsable(result *speedtester.Result) bool {
 	return (result.Latency <= *maxLatency || *maxLatency == 0) && result.ExtraURLConnectivity && 
-	(result.ExtraURLOpenSpeed >= *openSpeedThreshold || *extraConnectURL == "") &&
+	(result.ExtraURLOpenSpeed >= *openSpeedThreshold * 1024 * 1024 || *extraConnectURL == "") &&
 	result.DownloadSpeed >= *minSpeed * 1024 * 1024 && 
 	(result.ExtraDownloadSpeed >= *minSpeed * 1024 * 1024 || *extraDownloadURL == "")
 }
 
 
-func isProxyGood(result *speedtester.Result) {
+func isProxyGood(result *speedtester.Result) bool {
 	return isProxyUsable(result) && result.DownloadSpeed >= *goodDownloadSpeedThreshold &&
 	(result.ExtraURLOpenSpeed >= *goodOpenSpeedThreshold || *extraConnectURL == "") &&
 	(result.ExtraDownloadSpeed >= *goodDownloadSpeedThreshold || *extraDownloadURL == "")
@@ -146,7 +146,7 @@ func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 }
 
 
-func getAllConfigPath(configPaths string, string skipPaths) ([]string, error) {
+func getAllConfigPath(configPaths string, skipPaths string) ([]string, error) {
 	httpRegex := regexp.MustCompile(`^https?://`)
 	
 	_skipPaths := strings.Split(skipPaths, ",")
@@ -338,7 +338,7 @@ func printResults(results []*speedtester.Result) {
 	fmt.Println()
 }
 
-func doSaveConfig(results []*speedtester.Result, string absPath) error {
+func doSaveConfig(results []*speedtester.Result, absPath string) error {
 	proxies := make([]map[string]any, 0)
 	for _, result := range results {
 		proxies = append(proxies, result.ProxyConfig)
