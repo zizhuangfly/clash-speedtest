@@ -410,18 +410,30 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[strin
 	totalDownloadDuration := time.Duration(0)
 	if len(st.config.ExtraConnectURL) > 0 {
 		extraLatencyResult = make(map[string]*latencyResult, len(st.config.ExtraConnectURL))
-		
+		continuousFailedPings := 0
 		for _, url := range st.config.ExtraConnectURL {
 			latencies := make([]time.Duration, 0, testTimes)
 			failedPings := 0
 			for i := 0; i < testTimes; i++ {
+				if continuousFailedPings >= 3 {
+					//如果连通性测试都不OK的话，也就不用继续了
+
+					failedPings = testTimes
+					extraLatencyResult[url] = &latencyResult{
+						packetLoss: failedPings,
+					}
+					return extraLatencyResult, nil, nil
+				}
 				time.Sleep(100 * time.Millisecond)
 	
 				start := time.Now()
 				resp, err := client.Get(url)
 				if err != nil {
 					failedPings++
+					continuousFailedPings++
 					continue
+				} else {
+					continuousFailedPings = 0
 				}
 				
 				if resp.StatusCode == http.StatusOK {

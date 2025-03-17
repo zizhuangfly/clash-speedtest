@@ -54,13 +54,14 @@ func main() {
 		log.Fatalln("please specify the configuration file")
 	}
 	config := speedtester.Config{
-		//ConfigPaths:  *configPathsConfig,
-		FilterRegex:  *filterRegexConfig,
-		ServerURL:    *serverURL,
-		DownloadSize: *downloadSize,
-		UploadSize:   *uploadSize,
-		Timeout:      *timeout,
-		Concurrent:   *concurrent,
+		//ConfigPaths:  		*configPathsConfig,
+		FilterRegex:  		*filterRegexConfig,
+		ServerURL:    		*serverURL,
+		DownloadSize: 		*downloadSize,
+		UploadSize:   		*uploadSize,
+		Timeout:      		*timeout,
+		Concurrent:   		*concurrent,
+		ExtraDownloadURL: 	*extraDownloadURL,
 	}
 	if *extraConnectURL != "" {
 		config.ExtraConnectURL = strings.Split(*extraConnectURL, ",")
@@ -163,8 +164,10 @@ func createSubBar(proxyNumber int) *progressbar.ProgressBar {
 
 func getAllConfigPath(configPaths string, skipPaths string) ([]string, error) {
 	httpRegex := regexp.MustCompile(`^https?://`)
-	
-	_skipPaths := strings.Split(skipPaths, ",")
+	var _skipPaths []string
+	if skipPaths != "" {
+		_skipPaths = strings.Split(skipPaths, ",")
+	}
 
 	for i, pattern := range _skipPaths {        
         // 模式也转为绝对路径
@@ -173,7 +176,7 @@ func getAllConfigPath(configPaths string, skipPaths string) ([]string, error) {
 	}
 
 	cfgPaths := strings.Split(configPaths, ",")
-	resultPaths := make([]string, len(cfgPaths))
+	resultPaths := make([]string, 0)
 
 	for _, path := range cfgPaths {
 
