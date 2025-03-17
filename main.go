@@ -113,14 +113,17 @@ func main() {
 }
 
 func isProxyUsable(result *speedtester.Result) {
-	return (result.Latency <= *maxLatency || *maxLatency == 0) && result.ExtraURLConnectivity && (result.ExtraURLOpenSpeed >= *openSpeedThreshold || *extraConnectURL == "")
-	&& result.DownloadSpeed >= *minSpeed * 1024 * 1024 && (result.ExtraDownloadSpeed >= *minSpeed * 1024 * 1024 || *extraDownloadURL == "")
+	return (result.Latency <= *maxLatency || *maxLatency == 0) && result.ExtraURLConnectivity && 
+	(result.ExtraURLOpenSpeed >= *openSpeedThreshold || *extraConnectURL == "") &&
+	result.DownloadSpeed >= *minSpeed * 1024 * 1024 && 
+	(result.ExtraDownloadSpeed >= *minSpeed * 1024 * 1024 || *extraDownloadURL == "")
 }
 
 
 func isProxyGood(result *speedtester.Result) {
-	return isProxyUsable(result) && result.DownloadSpeed >= *goodDownloadSpeedThreshold && (result.ExtraURLOpenSpeed >= *goodOpenSpeedThreshold || *extraConnectURL == "")
-	&& (result.ExtraDownloadSpeed >= *goodDownloadSpeedThreshold || *extraDownloadURL == "")
+	return isProxyUsable(result) && result.DownloadSpeed >= *goodDownloadSpeedThreshold &&
+	(result.ExtraURLOpenSpeed >= *goodOpenSpeedThreshold || *extraConnectURL == "") &&
+	(result.ExtraDownloadSpeed >= *goodDownloadSpeedThreshold || *extraDownloadURL == "")
 }
 
 
