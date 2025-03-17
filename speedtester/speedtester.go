@@ -416,11 +416,9 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[strin
 			failedPings := 0
 			for i := 0; i < testTimes; i++ {
 				if continuousFailedPings >= 3 {
-					//如果连通性测试都不OK的话，也就不用继续了
-
-					failedPings = testTimes
+					//加快测试速度
 					extraLatencyResult[url] = &latencyResult{
-						packetLoss: failedPings,
+						packetLoss: float64(100),
 					}
 					return extraLatencyResult, nil, nil
 				}
