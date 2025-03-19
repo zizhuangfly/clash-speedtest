@@ -37,6 +37,7 @@ var (
 	openSpeedThreshold			= flag.Float64("open-speed-threshold", 0.1, "满足节点可用性的网站打开速度(单位: MB/s)")
 	goodOpenSpeedThreshold		= flag.Float64("good-open-speed-threshold", 0.5, "确定为优质节点的网站打开速度(单位: MB/s)")
 	goodDownloadSpeedThreshold	= flag.Float64("good-download-speed-threshold", 0.5, "确定为优质节点的资源下载速度(单位: MB/s)")
+	showLog						= flag.Bool("debug", false, "是否显示日志")
 )
 
 const (
@@ -48,7 +49,12 @@ const (
 
 func main() {
 	flag.Parse()
-	log.SetLevel(log.INFO)
+	if *showLog {
+		log.SetLevel(log.INFO)
+	} else {
+		log.SetLevel(log.SILENT)
+	}
+		
 
 	if *configPathsConfig == "" {
 		log.Fatalln("please specify the configuration file")
