@@ -73,47 +73,30 @@ func main() {
 	}
 
 	speedTester := speedtester.New(&config)
-
-	// 主进度条配置
-	mainBar := progressbar.NewOptions(len(actualPaths),
-		progressbar.OptionSetDescription("📦 yaml测试进行中"),
-		progressbar.OptionSetWidth(30),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "█",
-			SaucerPadding: " ",
-			BarStart:      "|",
-			BarEnd:        "|",
-		}),
-		progressbar.OptionOnCompletion(func() { 
-			fmt.Println("\n✅ 所有yaml文件测试完成！") 
-		}),
-	)
 	results := make([]*speedtester.Result, 0)
 
 	for _, actualPath := range actualPaths {
 		config.ConfigPaths = actualPath
-		mainBar.Describe("📦 " + actualPath)
+		title := filepath.Base(actualPath)
+		bar := progressbar.Default(int64(len(allProxies)), title)
 		allProxies, err := speedTester.LoadProxies()
 		if err != nil {
 			log.Warnln("load proxies failed: %v, %v, ", actualPath, err)
 		}
-		subBar := createSubBar(len(allProxies))
 		speedTester.TestProxies(allProxies, func(name string) {
-			subBar.Describe("    ↳🛠️" + name)
+			bar.Describe(title + " " + name)
 		},
 		func(result *speedtester.Result) {
-			subBar.Add(1)
+			bar.Add(1)
 			if isProxyUsable(result) {
 				results = append(results, result)
 			} else {
-				log.Infoln("%s is not useable", result.ProxyName)
+				log.Infoln("%s is not useable, %v", result.ProxyName, result)
 			}
 		})
-		subBar.Finish()
-		mainBar.Add(1)
+		bar.Finish()
 	}
-	mainBar.Finish()
+	log.Infoln("所有yaml文件测试完成✅")
 	
 	sort.Slice(results, func(i, j int) bool {
 		if isProxyGood(results[i]) == isProxyGood(results[j]) {
@@ -124,6 +107,9 @@ func main() {
 
 	printResults(results)
 
+	if len(results) == 0 {
+		log.Fatalln("测试结束没有找到任何可用节点")
+	}
 	if *outputPath != "" || *goodOutputPath != "" {
 		saveConfig(results)
 	}
