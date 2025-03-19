@@ -84,11 +84,11 @@ func main() {
 	for _, actualPath := range actualPaths {
 		config.ConfigPaths = actualPath
 		title := filepath.Base(actualPath)
-		bar := progressbar.Default(int64(len(allProxies)), title)
 		allProxies, err := speedTester.LoadProxies()
 		if err != nil {
 			log.Warnln("load proxies failed: %v, %v, ", actualPath, err)
 		}
+		bar := progressbar.Default(int64(len(allProxies)), title)
 		speedTester.TestProxies(allProxies, func(name string) {
 			bar.Describe(title + " " + name)
 		},
