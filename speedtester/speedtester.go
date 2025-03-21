@@ -538,6 +538,7 @@ func (st *SpeedTester) createClient(proxy constant.Proxy) *http.Client {
 					DstPort: u16Port,
 				})
 			},
+			//DisableCompression: true,
 		},
 	}
 }

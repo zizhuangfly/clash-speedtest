@@ -34,9 +34,8 @@ var (
 	skipPaths		  			= flag.String("skip-paths", "", "filter unwanted yaml file if specify direcotry")
 	extraConnectURL   			= flag.String("extra-connect-url", "", "must connect urls, ',' split multiple urls")
 	extraDownloadURL  			= flag.String("extra-download-url", "", "extra speed test url, like google drive share files")
-	openSpeedThreshold			= flag.Float64("open-speed-threshold", 0.1, "满足节点可用性的网站打开速度(单位: MB/s)")
-	goodOpenSpeedThreshold		= flag.Float64("good-open-speed-threshold", 0.5, "确定为优质节点的网站打开速度(单位: MB/s)")
-	goodDownloadSpeedThreshold	= flag.Float64("good-download-speed-threshold", 0.5, "确定为优质节点的资源下载速度(单位: MB/s)")
+	openSpeedThreshold			= flag.Float64("open-speed-threshold", 0.01, "满足节点可用性的网站打开速度(单位: MB/s)")
+	goodDownloadSpeedThreshold	= flag.Float64("good-download-speed-threshold", 1, "确定为优质节点的资源下载速度(单位: MB/s)")
 	showLog						= flag.Bool("debug", false, "是否显示日志")
 )
 
@@ -90,7 +89,7 @@ func main() {
 		}
 		bar := progressbar.Default(int64(len(allProxies)), title)
 		speedTester.TestProxies(allProxies, func(name string) {
-			bar.Describe(title + " " + name)
+			//bar.Describe(title + " " + name)
 		},
 		func(result *speedtester.Result) {
 			bar.Add(1)
@@ -101,6 +100,7 @@ func main() {
 			}
 		})
 		bar.Finish()
+		fmt.Println("")
 	}
 	log.Infoln("所有yaml文件测试完成✅")
 	
@@ -131,26 +131,7 @@ func isProxyUsable(result *speedtester.Result) bool {
 
 func isProxyGood(result *speedtester.Result) bool {
 	return isProxyUsable(result) && result.DownloadSpeed >= *goodDownloadSpeedThreshold &&
-	(result.ExtraURLOpenSpeed >= *goodOpenSpeedThreshold || *extraConnectURL == "") &&
 	(result.ExtraDownloadSpeed >= *goodDownloadSpeedThreshold || *extraDownloadURL == "")
-}
-
-
-func createSubBar(proxyNumber int) *progressbar.ProgressBar {
-	// 子进度条带缩进
-	subBar := progressbar.NewOptions(proxyNumber,
-		progressbar.OptionSetWidth(20),
-		progressbar.OptionSetDescription("    ↳🛠️"),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetVisibility(true),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "░",
-			SaucerPadding: " ",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}),
-	)
-	return subBar
 }
 
 
@@ -413,12 +394,20 @@ func saveConfig(results []*speedtester.Result) {
 	if *goodOutputPath != "" {
 		absGoodOutputPath, _ := filepath.Abs(*goodOutputPath)
 		goodResults := make([]*speedtester.Result, 0)
+		i := 0
 		for _, result := range results {
 			if isProxyGood(result) {
 				goodResults = append(goodResults, result)
+			} else {
+				results[i] = result
+				i++
 			}
 		}
 		doSaveConfig(goodResults, absGoodOutputPath)
+		for j := i; j < len(results); j++ {
+			results[j] = nil
+		}
+		results = results[:i]
 	}
 	if *outputPath != "" {
 		absOutputPath, _ := filepath.Abs(*outputPath)
