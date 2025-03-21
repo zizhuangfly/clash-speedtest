@@ -325,9 +325,9 @@ func printResults(results []*speedtester.Result) {
 		
 		urlOpenSpeed := result.ExtraURLOpenSpeed / (1024 * 1024)
 		extraURLOpenSpeedStr := result.FormatExtraURLOpenSpeed()
-		if urlOpenSpeed >= *goodOpenSpeedThreshold {
+		if urlOpenSpeed >= *openSpeedThreshold * 3 {
 			extraURLOpenSpeedStr = colorGreen + extraURLOpenSpeedStr + colorReset
-		} else if urlOpenSpeed >= *openSpeedThreshold + 0.1 {
+		} else if urlOpenSpeed >= *openSpeedThreshold * 2 {
 			extraURLOpenSpeedStr = colorYellow + extraURLOpenSpeedStr + colorReset
 		} else {
 			extraURLOpenSpeedStr = colorRed + extraURLOpenSpeedStr + colorReset
