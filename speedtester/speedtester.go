@@ -298,7 +298,7 @@ func isStashCompatible(proxy *CProxy) bool {
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, beforeFn func(name string), fn func(result *Result)) {
 	for name, proxy := range proxies {
 		beforeFn(name)
-		tester(st.testProxy(name, proxy))
+		fn(st.testProxy(name, proxy))
 	}
 }
 
@@ -431,7 +431,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		return result
 	}
 
-	extraLatencyResult, extraOpenResult, extraDownloadResult := st.testExtraLatencyAndSpeed(proxy)
+	extraLatencyResult, extraOpenResult, extraDownloadResult := st.testExtraLatencyAndSpeed(proxy, st.config.MaxLatency)
 	if existConnectivityProblem(extraLatencyResult) {
 		result.ExtraURLConnectivity = false
 		return result
@@ -449,34 +449,6 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 	var wg sync.WaitGroup
 
-	// 计算每个并发连接的数据大小
-	downloadChunkSize := st.config.DownloadSize / st.config.Concurrent
-	uploadChunkSize := st.config.UploadSize / st.config.Concurrent
-
-	// 启动下载测试
-	for i := 0; i < st.config.Concurrent; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			downloadResults <- st.testDownload(proxy, fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, downloadChunkSize))
-		}()
-	}
-	wg.Wait()
-
-	uploadResults := make(chan *downloadResult, st.config.Concurrent)
-
-	// 启动上传测试
-	for i := 0; i < st.config.Concurrent; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			uploadResults <- st.testUpload(proxy, uploadChunkSize)
-		}()
-	}
-	wg.Wait()
-
-
-	// 3. 汇总结果
 	var totalDownloadBytes, totalUploadBytes int64
 	var totalDownloadTime, totalUploadTime time.Duration
 	var downloadCount, uploadCount int
@@ -546,7 +518,6 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 			return result
 		}
 	}
-
 	return result
 }
 
@@ -588,8 +559,8 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy, minLatency time.Duratio
 	return calculateLatencyStats(latencies, failedPings)
 }
 
-func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[string]*latencyResult, *downloadResult, *downloadResult) {
-	client := st.createClient(proxy)
+func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy, timeout time.Duration) (map[string]*latencyResult, *downloadResult, *downloadResult) {
+	client := st.createClient(proxy, timeout)
 	testTimes := 6
 	var extraLatencyResult map[string]*latencyResult
 	var extraOpenResult *downloadResult
@@ -650,7 +621,7 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy) (map[strin
 		}
 	}
 	if st.config.ExtraDownloadURL != "" {
-		extraDownloadResult = st.testDownload(proxy, st.config.ExtraDownloadURL)
+		extraDownloadResult = st.testDownload(proxy, st.config.ExtraDownloadURL, st.config.Timeout)
 	}
 	
 
