@@ -461,7 +461,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				downloadResults <- st.testDownload(proxy, downloadChunkSize, st.config.Timeout)
+				downloadResults <- st.testDownload(proxy, st.config.Timeout, fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, downloadChunkSize))
 			}()
 		}
 		wg.Wait()
@@ -621,7 +621,7 @@ func (st *SpeedTester) testExtraLatencyAndSpeed(proxy constant.Proxy, timeout ti
 		}
 	}
 	if st.config.ExtraDownloadURL != "" {
-		extraDownloadResult = st.testDownload(proxy, st.config.ExtraDownloadURL, st.config.Timeout)
+		extraDownloadResult = st.testDownload(proxy, st.config.Timeout, st.config.ExtraDownloadURL)
 	}
 	
 
@@ -633,7 +633,7 @@ type downloadResult struct {
 	duration time.Duration
 }
 
-func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
+func (st *SpeedTester) testDownload(proxy constant.Proxy, timeout time.Duration, url string) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	start := time.Now()
 
