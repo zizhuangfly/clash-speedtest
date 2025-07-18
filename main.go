@@ -14,7 +14,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/metacubex/mihomo/log"
