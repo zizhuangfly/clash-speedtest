@@ -295,7 +295,7 @@ func isStashCompatible(proxy *CProxy) bool {
 	return true
 }
 
-func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, , beforeFn func(name string), fn func(result *Result)) {
+func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, beforeFn func(name string), fn func(result *Result)) {
 	for name, proxy := range proxies {
 		beforeFn(name)
 		tester(st.testProxy(name, proxy))

@@ -98,7 +98,7 @@ func main() {
 	for _, actualPath := range actualPaths {
 		config.ConfigPaths = actualPath
 		title := filepath.Base(actualPath)
-		allProxies, err := speedTester.LoadProxies()
+		allProxies, err := speedTester.LoadProxies(*stashCompatible)
 		if err != nil {
 			log.Warnln("load proxies failed: %v, %v, ", actualPath, err)
 		}
@@ -399,10 +399,10 @@ func printResults(results []*speedtester.Result) {
 				extraURLConnectivityStr,
 				extraURLOpenSpeedStr,
 				extraDownloadSpeedStr,
+			}
+			table.Append(row)
 		}
-		table.Append(row)
 	}
-
 	fmt.Println()
 	table.Render()
 	fmt.Println()
