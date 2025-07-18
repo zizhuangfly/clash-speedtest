@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"io/fs"
@@ -22,6 +26,7 @@ import (
 var (
 	configPathsConfig 			= flag.String("c", "", "config file path, also support http(s) url")
 	filterRegexConfig 			= flag.String("f", ".+", "filter proxies by name, use regexp")
+	blockKeywords     			= flag.String("b", "", "block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')")
 	serverURL        		    = flag.String("server-url", "https://speed.cloudflare.com", "server url")
 	downloadSize      			= flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
 	uploadSize        			= flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
@@ -29,6 +34,7 @@ var (
 	concurrent        			= flag.Int("concurrent", 4, "download concurrent size")
 	outputPath       			= flag.String("output", "./useable.yaml", "output config file path")
 	goodOutputPath				= flag.String("good-output", "./good.yaml", "output good config file path")
+	stashCompatible   			= flag.Bool("stash-compatible", false, "enable stash compatible mode")
 	maxLatency        			= flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
 	minSpeed         			= flag.Float64("min-speed", 0.1, "filter speed less than this value(unit: MB/s)")
 	skipPaths		  			= flag.String("skip-paths", "", "filter unwanted yaml file if specify direcotry")
@@ -37,6 +43,10 @@ var (
 	openSpeedThreshold			= flag.Float64("open-speed-threshold", 0.01, "满足节点可用性的网站打开速度(单位: MB/s)")
 	goodDownloadSpeedThreshold	= flag.Float64("good-download-speed-threshold", 1, "确定为优质节点的资源下载速度(单位: MB/s)")
 	showLog						= flag.Bool("debug", false, "是否显示日志")
+	minDownloadSpeed  			= flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
+	minUploadSpeed    			= flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
+	renameNodes       			= flag.Bool("rename", false, "rename nodes with IP location and speed")
+	fastMode          			= flag.Bool("fast", false, "fast mode, only test latency")
 )
 
 const (
@@ -62,11 +72,16 @@ func main() {
 		//ConfigPaths:  		*configPathsConfig,
 		FilterRegex:  		*filterRegexConfig,
 		ServerURL:    		*serverURL,
+		BlockRegex:       	*blockKeywords,
 		DownloadSize: 		*downloadSize,
 		UploadSize:   		*uploadSize,
 		Timeout:      		*timeout,
 		Concurrent:   		*concurrent,
 		ExtraDownloadURL: 	*extraDownloadURL,
+		MaxLatency:       *maxLatency,
+		MinDownloadSpeed: *minDownloadSpeed * 1024 * 1024,
+		MinUploadSpeed:   *minUploadSpeed * 1024 * 1024,
+		FastMode:         *fastMode,
 	}
 	if *extraConnectURL != "" {
 		config.ExtraConnectURL = strings.Split(*extraConnectURL, ",")
@@ -225,20 +240,30 @@ func isSkipped(path string, skipPaths []string) bool {
 func printResults(results []*speedtester.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
 
-	table.SetHeader([]string{
-		"序号",
-		"节点名称",
-		"类型",
-		"延迟",
-		"抖动",
-		"丢包率",
-		"下载速度",
-		"上传速度",
-		"自定义网站连通性",
-		"自定义网站打开速度",
-		"自定义资源下载速度",
-	})
-
+	var headers []string
+	if *fastMode {
+		headers = []string{
+			"序号",
+			"节点名称",
+			"类型",
+			"延迟",
+		}
+	} else {
+		headers = []string{
+			"序号",
+			"节点名称",
+			"类型",
+			"延迟",
+			"抖动",
+			"丢包率",
+			"下载速度",
+			"上传速度",
+			"自定义网站连通性",
+			"自定义网站打开速度",
+			"自定义资源下载速度",
+		}
+	}
+	table.SetHeader(headers)
 	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -250,6 +275,16 @@ func printResults(results []*speedtester.Result) {
 	table.SetBorder(false)
 	table.SetTablePadding("\t")
 	table.SetNoWhiteSpace(true)
+	table.SetColMinWidth(0, 4)  // 序号
+	table.SetColMinWidth(1, 20) // 节点名称
+	table.SetColMinWidth(2, 8)  // 类型
+	table.SetColMinWidth(3, 8)  // 延迟
+	if !*fastMode {
+		table.SetColMinWidth(4, 8)  // 抖动
+		table.SetColMinWidth(5, 8)  // 丢包率
+		table.SetColMinWidth(6, 12) // 下载速度
+		table.SetColMinWidth(7, 12) // 上传速度
+	}
 
 	for i, result := range results {
 		idStr := fmt.Sprintf("%d.", i+1)
@@ -343,20 +378,28 @@ func printResults(results []*speedtester.Result) {
 			extraDownloadSpeedStr = colorRed + extraDownloadSpeedStr + colorReset
 		}
 
-		row := []string{
-			idStr,
-			result.ProxyName,
-			result.ProxyType,
-			latencyStr,
-			jitterStr,
-			packetLossStr,
-			downloadSpeedStr,
-			uploadSpeedStr,
-			extraURLConnectivityStr,
-			extraURLOpenSpeedStr,
-			extraDownloadSpeedStr,
+		var row []string
+		if *fastMode {
+			row = []string{
+				idStr,
+				result.ProxyName,
+				result.ProxyType,
+				latencyStr,
+			}
+		} else {
+			row = []string{
+				idStr,
+				result.ProxyName,
+				result.ProxyType,
+				latencyStr,
+				jitterStr,
+				packetLossStr,
+				downloadSpeedStr,
+				uploadSpeedStr,
+				extraURLConnectivityStr,
+				extraURLOpenSpeedStr,
+				extraDownloadSpeedStr,
 		}
-
 		table.Append(row)
 	}
 
@@ -413,4 +456,60 @@ func saveConfig(results []*speedtester.Result) {
 		absOutputPath, _ := filepath.Abs(*outputPath)
 		doSaveConfig(results, absOutputPath)
 	}
+}
+
+type IPLocation struct {
+	Country     string `json:"country"`
+	CountryCode string `json:"countryCode"`
+}
+
+var countryFlags = map[string]string{
+	"US": "🇺🇸", "CN": "🇨🇳", "GB": "🇬🇧", "UK": "🇬🇧", "JP": "🇯🇵", "DE": "🇩🇪", "FR": "🇫🇷", "RU": "🇷🇺",
+	"SG": "🇸🇬", "HK": "🇭🇰", "TW": "🇹🇼", "KR": "🇰🇷", "CA": "🇨🇦", "AU": "🇦🇺", "NL": "🇳🇱", "IT": "🇮🇹",
+	"ES": "🇪🇸", "SE": "🇸🇪", "NO": "🇳🇴", "DK": "🇩🇰", "FI": "🇫🇮", "CH": "🇨🇭", "AT": "🇦🇹", "BE": "🇧🇪",
+	"BR": "🇧🇷", "IN": "🇮🇳", "TH": "🇹🇭", "MY": "🇲🇾", "VN": "🇻🇳", "PH": "🇵🇭", "ID": "🇮🇩", "UA": "🇺🇦",
+	"TR": "🇹🇷", "IL": "🇮🇱", "AE": "🇦🇪", "SA": "🇸🇦", "EG": "🇪🇬", "ZA": "🇿🇦", "NG": "🇳🇬", "KE": "🇰🇪",
+	"RO": "🇷🇴", "PL": "🇵🇱", "CZ": "🇨🇿", "HU": "🇭🇺", "BG": "🇧🇬", "HR": "🇭🇷", "SI": "🇸🇮", "SK": "🇸🇰",
+	"LT": "🇱🇹", "LV": "🇱🇻", "EE": "🇪🇪", "PT": "🇵🇹", "GR": "🇬🇷", "IE": "🇮🇪", "LU": "🇱🇺", "MT": "🇲🇹",
+	"CY": "🇨🇾", "IS": "🇮🇸", "MX": "🇲🇽", "AR": "🇦🇷", "CL": "🇨🇱", "CO": "🇨🇴", "PE": "🇵🇪", "VE": "🇻🇪",
+	"EC": "🇪🇨", "UY": "🇺🇾", "PY": "🇵🇾", "BO": "🇧🇴", "CR": "🇨🇷", "PA": "🇵🇦", "GT": "🇬🇹", "HN": "🇭🇳",
+	"SV": "🇸🇻", "NI": "🇳🇮", "BZ": "🇧🇿", "JM": "🇯🇲", "TT": "🇹🇹", "BB": "🇧🇧", "GD": "🇬🇩", "LC": "🇱🇨",
+	"VC": "🇻🇨", "AG": "🇦🇬", "DM": "🇩🇲", "KN": "🇰🇳", "BS": "🇧🇸", "CU": "🇨🇺", "DO": "🇩🇴", "HT": "🇭🇹",
+	"PR": "🇵🇷", "VI": "🇻🇮", "GU": "🇬🇺", "AS": "🇦🇸", "MP": "🇲🇵", "PW": "🇵🇼", "FM": "🇫🇲", "MH": "🇲🇭",
+	"KI": "🇰🇮", "TV": "🇹🇻", "NR": "🇳🇷", "WS": "🇼🇸", "TO": "🇹🇴", "FJ": "🇫🇯", "VU": "🇻🇺", "SB": "🇸🇧",
+	"PG": "🇵🇬", "NC": "🇳🇨", "PF": "🇵🇫", "WF": "🇼🇫", "CK": "🇨🇰", "NU": "🇳🇺", "TK": "🇹🇰", "SC": "🇸🇨",
+}
+
+func getIPLocation(ip string) (*IPLocation, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=country,countryCode", ip))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get location for IP %s", ip)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var location IPLocation
+	if err := json.Unmarshal(body, &location); err != nil {
+		return nil, err
+	}
+	return &location, nil
+}
+
+func generateNodeName(countryCode string, downloadSpeed float64) string {
+	flag, exists := countryFlags[strings.ToUpper(countryCode)]
+	if !exists {
+		flag = "🏳️"
+	}
+
+	speedMBps := downloadSpeed / (1024 * 1024)
+	return fmt.Sprintf("%s %s | ⬇️ %.2f MB/s", flag, strings.ToUpper(countryCode), speedMBps)
 }
